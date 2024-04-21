@@ -12,6 +12,7 @@ import path from "path";
 import sendMail from "../utils/sendMail";
 import NotificationModel from "../models/notificationModel";
 import { title } from "process";
+import axios from "axios";
 
 interface CustomRequest extends Request {
   user?: IUser;
@@ -116,26 +117,14 @@ export const getSingleCourse = CatchAsyncError(
 export const getAllCourse = CatchAsyncError(
   async (req: CustomRequest, res: Response, next: NextFunction) => {
     try {
-      const isCatchExist = await redis.get("allCourse");
-      if (isCatchExist) {
-        const courses = JSON.parse(isCatchExist);
+      const courses = await CourseModel.find().select(
+        "-courseData.videoUrl -courseData.suggestion -courseData.questions -courseData.links"
+      );
 
-        res.status(200).json({
-          success: true,
-          courses,
-        });
-      } else {
-        const courses = await CourseModel.find().select(
-          "-courseData.videoUrl -courseData.suggestion -courseData.questions -courseData.links"
-        );
-
-        await redis.set("allCourses", JSON.stringify(courses));
-
-        res.status(200).json({
-          success: true,
-          courses,
-        });
-      }
+      res.status(200).json({
+        success: true,
+        courses,
+      });
     } catch (error: any) {
       return next(new ErrorHandler(error.message, 500));
     }
@@ -431,8 +420,8 @@ export const addReplyToReview = CatchAsyncError(
   }
 );
 
-// get all course -- only for admin
-export const getAllUsers = CatchAsyncError(
+// get all courses -- only for admin
+export const getAdminAllCourses = CatchAsyncError(
   async (req: CustomRequest, res: Response, next: NextFunction) => {
     try {
       getAllCoursesService(res);
@@ -460,6 +449,29 @@ export const deleteCourse = CatchAsyncError(
         success: true,
         message: "Course deleted successfully",
       });
+    } catch (error: any) {
+      return next(new ErrorHandler(error.message, 400));
+    }
+  }
+);
+
+// generate video url
+export const generateVideoUrl = CatchAsyncError(
+  async (req: CustomRequest, res: Response, next: NextFunction) => {
+    try {
+      const { videoId } = req.body;
+      const response = await axios.post(
+        `https://dev.vdocipher.com/api/videos/${videoId}/otp`,
+        { ttl: 300 },
+        {
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            Authorization: `Apisecret ${process.env.VDOCIPHER_API_SECRET}`,
+          },
+        }
+      );
+      res.json(response.data);
     } catch (error: any) {
       return next(new ErrorHandler(error.message, 400));
     }
